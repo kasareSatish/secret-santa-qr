@@ -1,100 +1,310 @@
 "use client";
+
 import { useState, useEffect } from "react";
-interface MatchData { email: string; santaMatch: string; scannedAt: string; }
-interface ProgressData { totalParticipants: number; completedScans: number; usedQRs: number; matches: MatchData[]; }
+
+interface Participant {
+  id: string;
+  email: string;
+  santaName: string;
+  qrId: number;
+}
+
+interface MatchData {
+  email: string;
+  santaMatch: string;
+  scannedAt: string;
+}
+
+interface ProgressData {
+  totalParticipants: number;
+  completedScans: number;
+  matches: MatchData[];
+}
 
 export default function AdminPage() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
   const [progress, setProgress] = useState<ProgressData | null>(null);
+  const [participants, setParticipants] = useState<Participant[]>([]);
+  const [newEmail, setNewEmail] = useState("");
+  const [newSantaName, setNewSantaName] = useState("");
+  const [addError, setAddError] = useState("");
+  const [addSuccess, setAddSuccess] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
   const [snowflakes, setSnowflakes] = useState<{ id: number; left: number; delay: number; duration: number }[]>([]);
 
   useEffect(() => {
-    const flakes = Array.from({ length: 30 }, (_, i) => ({ id: i, left: Math.random() * 100, delay: Math.random() * 5, duration: 5 + Math.random() * 10 }));
+    const flakes = Array.from({ length: 20 }, (_, i) => ({
+      id: i,
+      left: Math.random() * 100,
+      delay: Math.random() * 5,
+      duration: 5 + Math.random() * 10,
+    }));
     setSnowflakes(flakes);
-    const adminAuth = sessionStorage.getItem("adminAuth");
-    if (adminAuth === "true") { setIsLoggedIn(true); fetchProgress(); }
+
+    const saved = sessionStorage.getItem("adminLoggedIn");
+    if (saved === "true") {
+      setIsLoggedIn(true);
+      fetchData();
+    }
   }, []);
 
-  const fetchProgress = async () => {
-    try { const res = await fetch("/api/scan"); const data = await res.json(); setProgress(data); } catch (err) { console.error("Failed:", err); }
+  const fetchData = async () => {
+    try {
+      const [progressRes, participantsRes] = await Promise.all([
+        fetch("/api/scan"),
+        fetch("/api/participants")
+      ]);
+      const progressData = await progressRes.json();
+      const participantsData = await participantsRes.json();
+      setProgress(progressData);
+      setParticipants(participantsData.participants || []);
+    } catch (err) {
+      console.error("Failed to fetch data:", err);
+    }
   };
 
   const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault(); setIsLoading(true); setError("");
+    e.preventDefault();
+    setError("");
+
     try {
-      const res = await fetch("/api/admin", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password }) });
-      const data = await res.json();
-      if (res.ok) { sessionStorage.setItem("adminAuth", "true"); setIsLoggedIn(true); fetchProgress(); } 
-      else { setError(data.message || "Invalid password"); }
-    } catch (err) { setError("Failed to login"); } finally { setIsLoading(false); }
+      const res = await fetch("/api/admin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
+      });
+
+      if (res.ok) {
+        setIsLoggedIn(true);
+        sessionStorage.setItem("adminLoggedIn", "true");
+        fetchData();
+      } else {
+        setError("Invalid password");
+      }
+    } catch (err) {
+      setError("Login failed");
+    }
   };
 
-  const handleLogout = () => { sessionStorage.removeItem("adminAuth"); setIsLoggedIn(false); };
-  const resetDatabase = async () => { if (!confirm("Delete ALL data?")) return; try { await fetch("/api/scan", { method: "DELETE" }); fetchProgress(); } catch (err) { console.error("Failed:", err); } };
-  const renderSnowflakes = () => snowflakes.map((f) => <span key={f.id} className="snowflake" style={{ left: f.left + "%", animationDelay: f.delay + "s", animationDuration: f.duration + "s" }}>❄</span>);
+  const handleAddParticipant = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAddError("");
+    setAddSuccess("");
+    setIsLoading(true);
+
+    try {
+      const res = await fetch("/api/participants", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: newEmail.trim(), santaName: newSantaName.trim() }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        setAddSuccess("Participant added successfully!");
+        setNewEmail("");
+        setNewSantaName("");
+        fetchData();
+      } else {
+        setAddError(data.error || "Failed to add participant");
+      }
+    } catch (err) {
+      setAddError("Failed to add participant");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleClearScans = async () => {
+    if (!confirm("Are you sure you want to clear all scan data?")) return;
+
+    try {
+      await fetch("/api/scan", { method: "DELETE" });
+      fetchData();
+    } catch (err) {
+      console.error("Failed to clear scans:", err);
+    }
+  };
+
+  const handleClearParticipants = async () => {
+    if (!confirm("Are you sure you want to clear all participants? This will also clear scan data.")) return;
+
+    try {
+      await Promise.all([
+        fetch("/api/participants", { method: "DELETE" }),
+        fetch("/api/scan", { method: "DELETE" })
+      ]);
+      fetchData();
+    } catch (err) {
+      console.error("Failed to clear:", err);
+    }
+  };
+
+  const handleLogout = () => {
+    setIsLoggedIn(false);
+    sessionStorage.removeItem("adminLoggedIn");
+    setPassword("");
+  };
+
+  const renderSnowflakes = () => snowflakes.map((flake) => (
+    <span key={flake.id} className="snowflake" style={{ left: flake.left + "%", animationDelay: flake.delay + "s", animationDuration: flake.duration + "s" }}>&#10052;</span>
+  ));
 
   if (!isLoggedIn) {
     return (
       <div className="min-h-screen relative overflow-hidden flex items-center justify-center">
         {renderSnowflakes()}
-        <div className="relative z-10 bg-black/30 backdrop-blur-lg rounded-2xl p-8 border border-white/10 text-center max-w-md w-full mx-4">
-          <span className="text-6xl mb-4 block">🔐</span>
-          <h1 className="text-3xl font-bold title-glow mb-6">Admin Login</h1>
+        <div className="relative z-10 bg-black/30 backdrop-blur-lg rounded-2xl p-8 border border-white/10 w-full max-w-md mx-4">
+          <h1 className="text-3xl font-bold title-glow text-center mb-6">Admin Login</h1>
           <form onSubmit={handleLogin} className="space-y-4">
-            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Enter admin password" className="w-full px-4 py-3 rounded-lg bg-white/10 border border-white/20 text-white placeholder-gray-500" disabled={isLoading} />
+            <div>
+              <label className="block text-gray-300 mb-2">Password:</label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full px-4 py-3 rounded-lg bg-white/10 border border-white/20 text-white placeholder-gray-500 focus:outline-none focus:border-green-400"
+                placeholder="Enter admin password"
+              />
+            </div>
             {error && <p className="text-red-400 text-sm">{error}</p>}
-            <button type="submit" disabled={isLoading} className="christmas-btn w-full text-white text-lg font-bold py-3 px-6 rounded-full">{isLoading ? "..." : "🎅 Login"}</button>
+            <button type="submit" className="christmas-btn w-full text-white font-bold py-3 px-6 rounded-full">
+              Login
+            </button>
           </form>
-          <a href="/" className="mt-6 inline-block text-gray-400 hover:text-white">Back to Home</a>
+          <div className="text-center mt-4">
+            <a href="/" className="text-gray-500 hover:text-gray-300 text-sm">Back to Home</a>
+          </div>
         </div>
       </div>
     );
   }
-
-  const completedCount = progress?.completedScans || 0;
-  const totalCount = progress?.totalParticipants || 2;
 
   return (
     <div className="min-h-screen relative overflow-hidden">
       {renderSnowflakes()}
       <div className="relative z-10 container mx-auto px-4 py-8">
         <div className="flex justify-between items-center mb-8">
-          <h1 className="text-4xl font-bold title-glow">🎄 Admin Dashboard 🎄</h1>
-          <button onClick={handleLogout} className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-white">Logout</button>
+          <h1 className="text-4xl font-bold title-glow">Admin Dashboard</h1>
+          <button onClick={handleLogout} className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-white">
+            Logout
+          </button>
         </div>
-        <div className="grid md:grid-cols-2 gap-8 max-w-6xl mx-auto">
+
+        <div className="grid md:grid-cols-2 gap-6">
+          {/* Add Participant Form */}
           <div className="bg-black/30 backdrop-blur-lg rounded-2xl p-6 border border-white/10">
-            <h2 className="text-2xl font-semibold mb-4">📊 Statistics</h2>
-            <div className="bg-white/10 rounded-lg p-4 mb-4">
-              <p className="text-gray-400 text-sm">Progress</p>
-              <div className="flex items-center gap-4 mt-2">
-                <div className="flex-1 bg-white/10 rounded-full h-4"><div className="bg-gradient-to-r from-green-500 to-red-500 h-4 rounded-full" style={{ width: (completedCount / totalCount * 100) + "%" }} /></div>
-                <span className="text-xl font-bold text-white">{completedCount}/{totalCount}</span>
+            <h2 className="text-2xl font-bold mb-4 text-green-400">Add Participant</h2>
+            <form onSubmit={handleAddParticipant} className="space-y-4">
+              <div>
+                <label className="block text-gray-300 mb-2">Email:</label>
+                <input
+                  type="email"
+                  value={newEmail}
+                  onChange={(e) => setNewEmail(e.target.value)}
+                  className="w-full px-4 py-3 rounded-lg bg-white/10 border border-white/20 text-white placeholder-gray-500 focus:outline-none focus:border-green-400"
+                  placeholder="participant@email.com"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-gray-300 mb-2">Santa Match Name:</label>
+                <input
+                  type="text"
+                  value={newSantaName}
+                  onChange={(e) => setNewSantaName(e.target.value)}
+                  className="w-full px-4 py-3 rounded-lg bg-white/10 border border-white/20 text-white placeholder-gray-500 focus:outline-none focus:border-green-400"
+                  placeholder="John Doe"
+                  required
+                />
+              </div>
+              {addError && <p className="text-red-400 text-sm">{addError}</p>}
+              {addSuccess && <p className="text-green-400 text-sm">{addSuccess}</p>}
+              <button type="submit" disabled={isLoading} className="christmas-btn w-full text-white font-bold py-3 px-6 rounded-full disabled:opacity-50">
+                {isLoading ? "Adding..." : "Add Participant"}
+              </button>
+            </form>
+          </div>
+
+          {/* Statistics */}
+          <div className="bg-black/30 backdrop-blur-lg rounded-2xl p-6 border border-white/10">
+            <h2 className="text-2xl font-bold mb-4 text-yellow-400">Statistics</h2>
+            <div className="space-y-4">
+              <div className="flex justify-between text-lg">
+                <span className="text-gray-400">Total Participants:</span>
+                <span className="text-white font-bold">{progress?.totalParticipants || 0}</span>
+              </div>
+              <div className="flex justify-between text-lg">
+                <span className="text-gray-400">Completed Scans:</span>
+                <span className="text-white font-bold">{progress?.completedScans || 0}</span>
+              </div>
+              <div className="w-full bg-white/10 rounded-full h-3 mt-4">
+                <div
+                  className="bg-gradient-to-r from-green-500 to-red-500 h-3 rounded-full transition-all"
+                  style={{ width: progress ? (progress.completedScans / (progress.totalParticipants || 1) * 100) + "%" : "0%" }}
+                />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="bg-white/10 rounded-lg p-4 text-center"><p className="text-3xl font-bold text-green-400">{completedCount}</p><p className="text-gray-400 text-sm">Completed</p></div>
-              <div className="bg-white/10 rounded-lg p-4 text-center"><p className="text-3xl font-bold text-yellow-400">{totalCount - completedCount}</p><p className="text-gray-400 text-sm">Remaining</p></div>
+          </div>
+        </div>
+
+        {/* Participants List */}
+        <div className="mt-6 bg-black/30 backdrop-blur-lg rounded-2xl p-6 border border-white/10">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-2xl font-bold text-blue-400">Participants ({participants.length})</h2>
+            <button onClick={handleClearParticipants} className="px-4 py-2 bg-red-600/50 hover:bg-red-600 rounded-lg text-white text-sm">
+              Clear All Participants
+            </button>
+          </div>
+          {participants.length === 0 ? (
+            <p className="text-gray-500">No participants added yet.</p>
+          ) : (
+            <div className="grid gap-2">
+              {participants.map((p) => (
+                <div key={p.id} className="flex justify-between items-center bg-white/5 rounded-lg p-3">
+                  <div>
+                    <span className="text-white">{p.email}</span>
+                    <span className="text-gray-500 mx-2">→</span>
+                    <span className="text-green-400">{p.santaName}</span>
+                  </div>
+                  <span className="text-gray-500 text-sm">QR #{p.qrId}</span>
+                </div>
+              ))}
             </div>
+          )}
+        </div>
+
+        {/* Completed Matches */}
+        <div className="mt-6 bg-black/30 backdrop-blur-lg rounded-2xl p-6 border border-white/10">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-2xl font-bold text-purple-400">Completed Matches ({progress?.matches?.length || 0})</h2>
+            <button onClick={handleClearScans} className="px-4 py-2 bg-orange-600/50 hover:bg-orange-600 rounded-lg text-white text-sm">
+              Clear Scan Data
+            </button>
           </div>
-          <div className="bg-black/30 backdrop-blur-lg rounded-2xl p-6 border border-white/10">
-            <h2 className="text-2xl font-semibold mb-4">⚙️ Actions</h2>
-            <div className="space-y-4">
-              <a href="/" className="block w-full px-4 py-3 bg-green-600 hover:bg-green-700 rounded-lg text-white text-center font-semibold">🎲 Go to QR Generator</a>
-              <button onClick={fetchProgress} className="w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg text-white font-semibold">🔄 Refresh Data</button>
-              <button onClick={resetDatabase} className="w-full px-4 py-3 bg-red-600 hover:bg-red-700 rounded-lg text-white font-semibold">🗑️ Clear All Data</button>
+          {!progress?.matches || progress.matches.length === 0 ? (
+            <p className="text-gray-500">No matches completed yet.</p>
+          ) : (
+            <div className="grid gap-2">
+              {progress.matches.map((m, i) => (
+                <div key={i} className="flex justify-between items-center bg-white/5 rounded-lg p-3">
+                  <div>
+                    <span className="text-white">{m.email}</span>
+                    <span className="text-gray-500 mx-2">matched with</span>
+                    <span className="text-yellow-400">{m.santaMatch}</span>
+                  </div>
+                  <span className="text-gray-500 text-sm">{new Date(m.scannedAt).toLocaleString()}</span>
+                </div>
+              ))}
             </div>
-          </div>
-          <div className="md:col-span-2 bg-black/30 backdrop-blur-lg rounded-2xl p-6 border border-white/10">
-            <h2 className="text-2xl font-semibold mb-4">✅ Completed Scans</h2>
-            {progress && progress.matches.length > 0 ? (
-              <table className="w-full"><thead><tr className="text-left text-gray-400 border-b border-white/10"><th className="pb-3">#</th><th className="pb-3">Email</th><th className="pb-3">Match</th><th className="pb-3">Time</th></tr></thead>
-              <tbody>{progress.matches.map((m, i) => <tr key={i} className="border-b border-white/5"><td className="py-3 text-gray-500">{i+1}</td><td className="py-3 text-white">{m.email}</td><td className="py-3 text-yellow-400">{m.santaMatch}</td><td className="py-3 text-gray-400">{new Date(m.scannedAt).toLocaleString()}</td></tr>)}</tbody></table>
-            ) : <div className="text-center py-8 text-gray-500"><p className="text-4xl mb-2">📭</p><p>No scans yet</p></div>}
-          </div>
+          )}
+        </div>
+
+        <div className="text-center mt-8">
+          <a href="/" className="text-gray-500 hover:text-gray-300">Back to Home</a>
         </div>
       </div>
     </div>
