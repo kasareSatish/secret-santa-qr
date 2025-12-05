@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
 import QRCode from "qrcode";
+import confetti from "canvas-confetti";
 
 interface MatchData { email: string; santaMatch: string; scannedAt: string; }
 interface ProgressData { totalParticipants: number; totalEmails: number; totalSantas: number; completedScans: number; matches: MatchData[]; }
@@ -12,15 +13,50 @@ export default function Home() {
   const [snowflakes, setSnowflakes] = useState<{ id: number; left: number; delay: number; duration: number }[]>([]);
   const [lastMatchCount, setLastMatchCount] = useState(0);
   const [showMatchAlert, setShowMatchAlert] = useState(false);
-  const [latestMatch, setLatestMatch] = useState<MatchData | null>(null);
   const pollInterval = useRef<NodeJS.Timeout | null>(null);
+
+  const fireCrackers = () => {
+    // Fire multiple confetti bursts
+    const duration = 3000;
+    const end = Date.now() + duration;
+
+    const colors = ["#ff0000", "#00ff00", "#ffd700", "#ff6b6b", "#4ecdc4"];
+
+    (function frame() {
+      confetti({
+        particleCount: 5,
+        angle: 60,
+        spread: 55,
+        origin: { x: 0, y: 0.8 },
+        colors: colors
+      });
+      confetti({
+        particleCount: 5,
+        angle: 120,
+        spread: 55,
+        origin: { x: 1, y: 0.8 },
+        colors: colors
+      });
+
+      if (Date.now() < end) {
+        requestAnimationFrame(frame);
+      }
+    })();
+
+    // Big center burst
+    confetti({
+      particleCount: 150,
+      spread: 100,
+      origin: { y: 0.6 },
+      colors: colors
+    });
+  };
 
   useEffect(() => {
     const flakes = Array.from({ length: 30 }, (_, i) => ({ id: i, left: Math.random() * 100, delay: Math.random() * 5, duration: 5 + Math.random() * 10 }));
     setSnowflakes(flakes);
     fetchData();
 
-    // Start polling every 3 seconds
     pollInterval.current = setInterval(fetchData, 3000);
 
     return () => {
@@ -33,11 +69,9 @@ export default function Home() {
       const res = await fetch("/api/scan");
       const data = await res.json();
 
-      // Check if new match happened
       if (data.completedScans > lastMatchCount && lastMatchCount > 0) {
-        const newMatch = data.matches[data.matches.length - 1];
-        setLatestMatch(newMatch);
         setShowMatchAlert(true);
+        fireCrackers();
         setTimeout(() => setShowMatchAlert(false), 5000);
       }
       setLastMatchCount(data.completedScans);
@@ -66,10 +100,14 @@ export default function Home() {
     <div className="min-h-screen relative overflow-hidden">
       {snowflakes.map((f) => <span key={f.id} className="snowflake" style={{ left: f.left + "%", animationDelay: f.delay + "s", animationDuration: f.duration + "s" }}>&#10052;</span>)}
 
-      {/* Match Alert */}
-      {showMatchAlert && latestMatch && (
-        <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 bg-green-600 text-white px-6 py-3 rounded-full shadow-lg animate-bounce">
-          &#10004; Match completed!
+      {/* Congratulations Alert */}
+      {showMatchAlert && (
+        <div className="fixed inset-0 flex items-center justify-center z-50 pointer-events-none">
+          <div className="bg-gradient-to-r from-green-600 to-red-600 text-white px-10 py-6 rounded-2xl shadow-2xl text-center animate-bounce">
+            <p className="text-4xl mb-2">&#127881;&#127881;&#127881;</p>
+            <p className="text-2xl font-bold">Congratulations!</p>
+            <p className="text-lg">Someone just got their Secret Santa!</p>
+          </div>
         </div>
       )}
 

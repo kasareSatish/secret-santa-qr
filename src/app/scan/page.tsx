@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import confetti from "canvas-confetti";
 
 export default function ScanPage() {
   const [email, setEmail] = useState("");
@@ -10,6 +11,42 @@ export default function ScanPage() {
   const [errorType, setErrorType] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [snowflakes, setSnowflakes] = useState<{ id: number; left: number; delay: number; duration: number }[]>([]);
+
+  const fireCelebration = () => {
+    const duration = 4000;
+    const end = Date.now() + duration;
+    const colors = ["#ff0000", "#00ff00", "#ffd700", "#ff6b6b", "#4ecdc4", "#ffffff"];
+
+    // Big initial burst
+    confetti({
+      particleCount: 200,
+      spread: 120,
+      origin: { y: 0.5 },
+      colors: colors
+    });
+
+    // Continuous side bursts
+    (function frame() {
+      confetti({
+        particleCount: 4,
+        angle: 60,
+        spread: 55,
+        origin: { x: 0, y: 0.7 },
+        colors: colors
+      });
+      confetti({
+        particleCount: 4,
+        angle: 120,
+        spread: 55,
+        origin: { x: 1, y: 0.7 },
+        colors: colors
+      });
+
+      if (Date.now() < end) {
+        requestAnimationFrame(frame);
+      }
+    })();
+  };
 
   useEffect(() => {
     const flakes = Array.from({ length: 30 }, (_, i) => ({
@@ -50,6 +87,7 @@ export default function ScanPage() {
 
       setSantaMatch(data.santaMatch);
       setSubmitted(true);
+      setTimeout(() => fireCelebration(), 300);
     } catch (err) {
       setError("Failed to submit. Please try again.");
       setErrorType("network_error");
@@ -107,13 +145,14 @@ export default function ScanPage() {
       <div className="min-h-screen relative overflow-hidden flex items-center justify-center">
         {renderSnowflakes()}
         <div className="relative z-10 bg-black/30 backdrop-blur-lg rounded-2xl p-8 border border-white/10 text-center max-w-md">
-          <span className="text-6xl mb-4 block">&#127881;</span>
-          <h1 className="text-3xl font-bold title-glow mb-4">Success!</h1>
+          <span className="text-6xl mb-4 block">&#127881;&#127873;&#127881;</span>
+          <h1 className="text-4xl font-bold title-glow mb-2">Congratulations!</h1>
           <p className="text-gray-400 mb-6">Your Secret Santa match is:</p>
-          <div className="bg-white/10 rounded-lg p-6 mb-6">
-            <p className="text-3xl font-bold text-yellow-400">{santaMatch}</p>
+          <div className="bg-gradient-to-r from-green-600/20 to-red-600/20 rounded-xl p-8 mb-6 border border-yellow-500/50">
+            <p className="text-4xl font-bold text-yellow-400">{santaMatch}</p>
           </div>
           <p className="text-gray-500 text-sm">Keep it a secret! &#129323;</p>
+          <p className="text-green-400 text-xs mt-4">&#127876; Merry Christmas! &#127876;</p>
         </div>
       </div>
     );
