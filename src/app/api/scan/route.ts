@@ -3,19 +3,18 @@ import clientPromise from "@/lib/mongodb";
 
 // List 1: Valid emails who can participate
 const VALID_EMAILS = [
-  "test@xyz.com",
-  // Add more valid emails here
+  "john.smith@gmail.com",
+  "emma.wilson@yahoo.com",
 ];
 
 // List 2: Secret Santa matches (QR ID -> Santa name to show)
 const SANTA_MATCHES: Record<number, string> = {
-  1: "Santa Alice",
-  2: "Santa Bob",
-  3: "Santa Charlie",
-  4: "Santa Diana",
-  5: "Santa Edward",
-  // Add more matches: QR studentId -> Santa name
+  1: "Michael Johnson",
+  2: "Sarah Parker",
 };
+
+// Total participants
+const TOTAL_PARTICIPANTS = 2;
 
 export async function POST(request: NextRequest) {
   try {
@@ -30,7 +29,6 @@ export async function POST(request: NextRequest) {
 
     const normalizedEmail = email.trim().toLowerCase();
 
-    // Step 1: Check if email is in valid list
     if (!VALID_EMAILS.includes(normalizedEmail)) {
       return NextResponse.json(
         { error: "invalid_email", message: "This email is not registered for Secret Santa" },
@@ -38,35 +36,27 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Connect to MongoDB
     const client = await clientPromise;
     const db = client.db("secret-santa");
     const scansCollection = db.collection("scans");
     const usedQRsCollection = db.collection("used_qrs");
 
-    // Step 2: Check if this QR has already been used
     const usedQR = await usedQRsCollection.findOne({ qrId: qrId });
     if (usedQR) {
       return NextResponse.json(
-        { error: "qr_used", message: "This QR code has already been scanned by someone else!" },
+        { error: "qr_used", message: "This QR code has already been scanned!" },
         { status: 403 }
       );
     }
 
-    // Step 3: Check if this email already scanned a QR
     const existingScan = await scansCollection.findOne({ email: normalizedEmail });
     if (existingScan) {
       return NextResponse.json(
-        {
-          error: "already_scanned",
-          message: "You have already scanned a QR code!",
-          existingMatch: existingScan.santaMatch
-        },
+        { error: "already_scanned", message: "You have already scanned a QR code!", existingMatch: existingScan.santaMatch },
         { status: 403 }
       );
     }
 
-    // Step 4: Get the Santa match for this QR
     const santaMatch = SANTA_MATCHES[qrId];
     if (!santaMatch) {
       return NextResponse.json(
@@ -75,7 +65,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Step 5: Record the scan
     await scansCollection.insertOne({
       email: normalizedEmail,
       qrId: qrId,
@@ -83,7 +72,6 @@ export async function POST(request: NextRequest) {
       scannedAt: new Date(),
     });
 
-    // Step 6: Mark this QR as used
     await usedQRsCollection.insertOne({
       qrId: qrId,
       usedBy: normalizedEmail,
@@ -117,7 +105,8 @@ export async function GET() {
     const allMatches = await scansCollection.find({}).toArray();
 
     return NextResponse.json({
-      totalScans,
+      totalParticipants: TOTAL_PARTICIPANTS,
+      completedScans: totalScans,
       usedQRs,
       matches: allMatches.map(m => ({
         email: m.email,
@@ -127,5 +116,19 @@ export async function GET() {
     });
   } catch (error) {
     return NextResponse.json({ error: "Failed to fetch data" }, { status: 500 });
+  }
+}
+
+export async function DELETE() {
+  try {
+    const client = await clientPromise;
+    const db = client.db("secret-santa");
+    
+    await db.collection("scans").deleteMany({});
+    await db.collection("used_qrs").deleteMany({});
+
+    return NextResponse.json({ success: true, message: "Database cleaned!" });
+  } catch (error) {
+    return NextResponse.json({ error: "Failed to clean database" }, { status: 500 });
   }
 }
