@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import QRCode from "qrcode";
 
 interface MatchData { email: string; santaMatch: string; scannedAt: string; }
@@ -10,17 +10,37 @@ export default function Home() {
   const [qrGenerated, setQrGenerated] = useState(false);
   const [progress, setProgress] = useState<ProgressData | null>(null);
   const [snowflakes, setSnowflakes] = useState<{ id: number; left: number; delay: number; duration: number }[]>([]);
+  const [lastMatchCount, setLastMatchCount] = useState(0);
+  const [showMatchAlert, setShowMatchAlert] = useState(false);
+  const [latestMatch, setLatestMatch] = useState<MatchData | null>(null);
+  const pollInterval = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     const flakes = Array.from({ length: 30 }, (_, i) => ({ id: i, left: Math.random() * 100, delay: Math.random() * 5, duration: 5 + Math.random() * 10 }));
     setSnowflakes(flakes);
     fetchData();
+
+    // Start polling every 3 seconds
+    pollInterval.current = setInterval(fetchData, 3000);
+
+    return () => {
+      if (pollInterval.current) clearInterval(pollInterval.current);
+    };
   }, []);
 
   const fetchData = async () => {
     try {
       const res = await fetch("/api/scan");
       const data = await res.json();
+
+      // Check if new match happened
+      if (data.completedScans > lastMatchCount && lastMatchCount > 0) {
+        const newMatch = data.matches[data.matches.length - 1];
+        setLatestMatch(newMatch);
+        setShowMatchAlert(true);
+        setTimeout(() => setShowMatchAlert(false), 5000);
+      }
+      setLastMatchCount(data.completedScans);
       setProgress(data);
     } catch (err) { console.error("Failed:", err); }
   };
@@ -45,6 +65,14 @@ export default function Home() {
   return (
     <div className="min-h-screen relative overflow-hidden">
       {snowflakes.map((f) => <span key={f.id} className="snowflake" style={{ left: f.left + "%", animationDelay: f.delay + "s", animationDuration: f.duration + "s" }}>&#10052;</span>)}
+
+      {/* Match Alert */}
+      {showMatchAlert && latestMatch && (
+        <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 bg-green-600 text-white px-6 py-3 rounded-full shadow-lg animate-bounce">
+          &#10004; Match completed!
+        </div>
+      )}
+
       <div className="relative z-10 container mx-auto px-4 py-8">
         <div className="text-center mb-8">
           <h1 className="text-5xl font-bold title-glow mb-4"><span className="text-red-500">&#127876;</span> Secret Santa <span className="text-red-500">&#127876;</span></h1>
@@ -53,14 +81,20 @@ export default function Home() {
         <div className="max-w-lg mx-auto">
           <div className="bg-black/30 backdrop-blur-lg rounded-2xl p-8 border border-white/10 flex flex-col items-center">
             <div className="w-full mb-6">
-              <div className="flex justify-between text-sm text-gray-400 mb-2"><span>Progress</span><span>{completedCount} / {totalCount} matched</span></div>
+              <div className="flex justify-between text-sm text-gray-400 mb-2">
+                <span>Progress <span className="text-green-400 text-xs">(live)</span></span>
+                <span>{completedCount} / {totalCount} matched</span>
+              </div>
               <div className="w-full bg-white/10 rounded-full h-3"><div className="bg-gradient-to-r from-green-500 to-red-500 h-3 rounded-full transition-all" style={{ width: totalCount > 0 ? (completedCount / totalCount * 100) + "%" : "0%" }} /></div>
               {availableSantas > 0 && <p className="text-gray-500 text-sm mt-2">{availableSantas} santa matches available</p>}
             </div>
             {totalCount === 0 ? (
               <p className="text-gray-400 mb-6">No data yet. Add emails and santa names in Admin.</p>
             ) : allCompleted ? (
-              <p className="text-yellow-400 text-xl mb-6">&#127881; All Secret Santas assigned!</p>
+              <div className="text-center mb-6">
+                <p className="text-yellow-400 text-2xl mb-2">&#127881; All Secret Santas assigned!</p>
+                <p className="text-green-400">Event complete - {completedCount} matches made</p>
+              </div>
             ) : (
               <button onClick={generateQR} className="christmas-btn text-white text-xl font-bold py-4 px-10 rounded-full mb-6">&#127922; Generate QR Code</button>
             )}
