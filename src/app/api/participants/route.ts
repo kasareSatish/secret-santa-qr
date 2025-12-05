@@ -5,8 +5,12 @@ export async function GET() {
   try {
     const client = await clientPromise;
     const db = client.db("secret-santa");
-    const participants = await db.collection("participants").find({}).toArray();
-    return NextResponse.json({ participants: participants.map(p => ({ id: p._id, email: p.email, santaName: p.santaName, qrId: p.qrId })) });
+    const emails = await db.collection("emails").find({}).toArray();
+    const santaNames = await db.collection("santa_names").find({}).toArray();
+    return NextResponse.json({
+      emails: emails.map(e => ({ id: e._id.toString(), email: e.email })),
+      santaNames: santaNames.map(s => ({ id: s._id.toString(), name: s.name, assigned: s.assigned || false }))
+    });
   } catch (error) {
     return NextResponse.json({ error: "Failed to fetch" }, { status: 500 });
   }
@@ -14,31 +18,56 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    const { email, santaName } = await request.json();
-    if (!email || !santaName) {
-      return NextResponse.json({ error: "Email and Santa name required" }, { status: 400 });
+    const { type, value } = await request.json();
+    if (!type || !value) {
+      return NextResponse.json({ error: "Type and value required" }, { status: 400 });
     }
     const client = await clientPromise;
     const db = client.db("secret-santa");
-    const existing = await db.collection("participants").findOne({ email: email.toLowerCase() });
-    if (existing) {
-      return NextResponse.json({ error: "Email already exists" }, { status: 400 });
+
+    if (type === "email") {
+      const normalizedEmail = value.trim().toLowerCase();
+      const existing = await db.collection("emails").findOne({ email: normalizedEmail });
+      if (existing) {
+        return NextResponse.json({ error: "Email already exists" }, { status: 400 });
+      }
+      await db.collection("emails").insertOne({ email: normalizedEmail, createdAt: new Date() });
+      return NextResponse.json({ success: true, message: "Email added" });
+    } else if (type === "santa") {
+      const existing = await db.collection("santa_names").findOne({ name: value.trim() });
+      if (existing) {
+        return NextResponse.json({ error: "Santa name already exists" }, { status: 400 });
+      }
+      await db.collection("santa_names").insertOne({ name: value.trim(), assigned: false, createdAt: new Date() });
+      return NextResponse.json({ success: true, message: "Santa name added" });
+    } else {
+      return NextResponse.json({ error: "Invalid type" }, { status: 400 });
     }
-    const count = await db.collection("participants").countDocuments();
-    const qrId = count + 1;
-    await db.collection("participants").insertOne({ email: email.toLowerCase(), santaName, qrId, createdAt: new Date() });
-    return NextResponse.json({ success: true, qrId });
   } catch (error) {
     return NextResponse.json({ error: "Failed to add" }, { status: 500 });
   }
 }
 
-export async function DELETE() {
+export async function DELETE(request: NextRequest) {
   try {
+    const { searchParams } = new URL(request.url);
+    const type = searchParams.get("type");
+
     const client = await clientPromise;
     const db = client.db("secret-santa");
-    await db.collection("participants").deleteMany({});
-    return NextResponse.json({ success: true });
+
+    if (type === "emails") {
+      await db.collection("emails").deleteMany({});
+      return NextResponse.json({ success: true, message: "Emails cleared" });
+    } else if (type === "santas") {
+      await db.collection("santa_names").deleteMany({});
+      return NextResponse.json({ success: true, message: "Santa names cleared" });
+    } else {
+      await db.collection("emails").deleteMany({});
+      await db.collection("santa_names").deleteMany({});
+      await db.collection("scans").deleteMany({});
+      return NextResponse.json({ success: true, message: "All data cleared" });
+    }
   } catch (error) {
     return NextResponse.json({ error: "Failed to delete" }, { status: 500 });
   }
