@@ -11,7 +11,7 @@ export default function Home() {
   const [qrGenerated, setQrGenerated] = useState(false);
   const [progress, setProgress] = useState<ProgressData | null>(null);
   const [snowflakes, setSnowflakes] = useState<{ id: number; left: number; delay: number; duration: number }[]>([]);
-  const [lastMatchCount, setLastMatchCount] = useState(0);
+  const lastMatchCountRef = useRef(0);
   const [celebrating, setCelebrating] = useState(false);
   const pollInterval = useRef<NodeJS.Timeout | null>(null);
 
@@ -50,7 +50,7 @@ export default function Home() {
       }
     })();
 
-    // Another burst in the middle
+    // Another burst
     setTimeout(() => {
       confetti({
         particleCount: 100,
@@ -58,7 +58,7 @@ export default function Home() {
         origin: { y: 0.6 },
         colors: colors
       });
-    }, 1000);
+    }, 1500);
   };
 
   useEffect(() => {
@@ -78,12 +78,12 @@ export default function Home() {
       const res = await fetch("/api/scan");
       const data = await res.json();
 
-      if (data.completedScans > lastMatchCount && lastMatchCount > 0) {
+      if (data.completedScans > lastMatchCountRef.current && lastMatchCountRef.current > 0) {
         setCelebrating(true);
         fireCrackers();
         setTimeout(() => setCelebrating(false), 6000);
       }
-      setLastMatchCount(data.completedScans);
+      lastMatchCountRef.current = data.completedScans;
       setProgress(data);
     } catch (err) { console.error("Failed:", err); }
   };
@@ -109,6 +109,19 @@ export default function Home() {
     <div className="min-h-screen relative overflow-hidden">
       {snowflakes.map((f) => <span key={f.id} className="snowflake" style={{ left: f.left + "%", animationDelay: f.delay + "s", animationDuration: f.duration + "s" }}>&#10052;</span>)}
 
+      {/* Celebration Overlay - shows on top but doesn't hide content */}
+      {celebrating && (
+        <div className="fixed inset-0 flex items-center justify-center z-50 pointer-events-none">
+          <div className="bg-black/80 backdrop-blur-sm rounded-3xl p-10 text-center border-4 border-yellow-400 shadow-2xl animate-bounce">
+            <p className="text-6xl mb-4">&#127881;&#127882;&#127881;</p>
+            <h2 className="text-4xl font-bold text-yellow-400 mb-2">Congratulations!</h2>
+            <p className="text-2xl text-green-400 mb-2">Match Found!</p>
+            <p className="text-white">Someone got their Secret Santa!</p>
+            <p className="text-5xl mt-4">&#127877;&#127873;&#127876;</p>
+          </div>
+        </div>
+      )}
+
       <div className="relative z-10 container mx-auto px-4 py-8">
         <div className="text-center mb-8">
           <h1 className="text-5xl font-bold title-glow mb-4"><span className="text-red-500">&#127876;</span> Secret Santa <span className="text-red-500">&#127876;</span></h1>
@@ -122,40 +135,27 @@ export default function Home() {
                 <span>{completedCount} / {totalCount} matched</span>
               </div>
               <div className="w-full bg-white/10 rounded-full h-3"><div className="bg-gradient-to-r from-green-500 to-red-500 h-3 rounded-full transition-all" style={{ width: totalCount > 0 ? (completedCount / totalCount * 100) + "%" : "0%" }} /></div>
-              {availableSantas > 0 && !celebrating && <p className="text-gray-500 text-sm mt-2">{availableSantas} santa matches available</p>}
+              {availableSantas > 0 && <p className="text-gray-500 text-sm mt-2">{availableSantas} santa matches available</p>}
             </div>
 
-            {/* Celebration Screen */}
-            {celebrating ? (
-              <div className="text-center py-8">
-                <p className="text-6xl mb-4">&#127881;&#127882;&#127881;</p>
-                <h2 className="text-4xl font-bold text-yellow-400 mb-4 animate-pulse">Congratulations!</h2>
-                <p className="text-2xl text-green-400 mb-2">Match Found!</p>
-                <p className="text-gray-300">Someone just got their Secret Santa!</p>
-                <p className="text-6xl mt-4">&#127877;&#127873;&#127876;</p>
+            {totalCount === 0 ? (
+              <p className="text-gray-400 mb-6">No data yet. Add emails and santa names in Admin.</p>
+            ) : allCompleted ? (
+              <div className="text-center mb-6">
+                <p className="text-yellow-400 text-2xl mb-2">&#127881; All Secret Santas assigned!</p>
+                <p className="text-green-400">Event complete - {completedCount} matches made</p>
               </div>
             ) : (
-              <>
-                {totalCount === 0 ? (
-                  <p className="text-gray-400 mb-6">No data yet. Add emails and santa names in Admin.</p>
-                ) : allCompleted ? (
-                  <div className="text-center mb-6">
-                    <p className="text-yellow-400 text-2xl mb-2">&#127881; All Secret Santas assigned!</p>
-                    <p className="text-green-400">Event complete - {completedCount} matches made</p>
-                  </div>
-                ) : (
-                  <button onClick={generateQR} className="christmas-btn text-white text-xl font-bold py-4 px-10 rounded-full mb-6">&#127922; Generate QR Code</button>
-                )}
-                {qrCodeUrl && qrGenerated && !allCompleted && (
-                  <div className="qr-container text-center">
-                    <p className="text-gray-800 font-semibold mb-3 text-lg">&#127873; Scan to get your match!</p>
-                    <img src={qrCodeUrl} alt="QR Code" className="mx-auto" />
-                    <p className="text-gray-600 text-sm mt-3">Enter your email to reveal your Secret Santa</p>
-                  </div>
-                )}
-                {!qrCodeUrl && totalCount > 0 && !allCompleted && <div className="qr-container text-center opacity-50"><div className="w-[300px] h-[300px] flex items-center justify-center border-2 border-dashed border-gray-300 rounded-lg"><p className="text-gray-500 px-4">Click to generate a QR code</p></div></div>}
-              </>
+              <button onClick={generateQR} className="christmas-btn text-white text-xl font-bold py-4 px-10 rounded-full mb-6">&#127922; Generate QR Code</button>
             )}
+            {qrCodeUrl && qrGenerated && !allCompleted && (
+              <div className="qr-container text-center">
+                <p className="text-gray-800 font-semibold mb-3 text-lg">&#127873; Scan to get your match!</p>
+                <img src={qrCodeUrl} alt="QR Code" className="mx-auto" />
+                <p className="text-gray-600 text-sm mt-3">Enter your email to reveal your Secret Santa</p>
+              </div>
+            )}
+            {!qrCodeUrl && totalCount > 0 && !allCompleted && <div className="qr-container text-center opacity-50"><div className="w-[300px] h-[300px] flex items-center justify-center border-2 border-dashed border-gray-300 rounded-lg"><p className="text-gray-500 px-4">Click to generate a QR code</p></div></div>}
           </div>
         </div>
         <div className="text-center mt-8">
