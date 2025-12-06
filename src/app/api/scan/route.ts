@@ -23,9 +23,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "already_scanned", message: "You have already registered!" }, { status: 403 });
     }
 
-    // Get available santa names (not yet assigned)
-    const availableSantas = await db.collection("santa_names").find({ assigned: { $ne: true } }).toArray();
+    // Get available santa names (not yet assigned AND not the same person)
+    const availableSantas = await db.collection("santa_names").find({ 
+      assigned: { $ne: true },
+      email: { $ne: normalizedEmail }  // Exclude self-match
+    }).toArray();
+    
     if (availableSantas.length === 0) {
+      // If no santas available excluding self, check if only self is left
+      const onlySelfLeft = await db.collection("santa_names").find({ 
+        assigned: { $ne: true }
+      }).toArray();
+      
+      if (onlySelfLeft.length === 1 && onlySelfLeft[0].email === normalizedEmail) {
+        return NextResponse.json({ error: "only_self_left", message: "Only your own name is left! Please contact the organizer." }, { status: 404 });
+      }
+      
       return NextResponse.json({ error: "no_santas", message: "No santa matches available!" }, { status: 404 });
     }
 

@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 
 interface EmailData { id: string; email: string; }
-interface SantaData { id: string; name: string; assigned: boolean; }
+interface SantaData { id: string; name: string; email: string; assigned: boolean; }
 interface MatchData { email: string; santaMatch: string; scannedAt: string; }
 interface ProgressData { totalParticipants: number; totalEmails: number; totalSantas: number; completedScans: number; matches: MatchData[]; }
 
@@ -16,6 +16,7 @@ export default function AdminPage() {
   const [santaNames, setSantaNames] = useState<SantaData[]>([]);
   const [newEmail, setNewEmail] = useState("");
   const [newSantaName, setNewSantaName] = useState("");
+  const [newSantaEmail, setNewSantaEmail] = useState("");
   const [addError, setAddError] = useState("");
   const [addSuccess, setAddSuccess] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -59,9 +60,13 @@ export default function AdminPage() {
   const handleAddSanta = async (e: React.FormEvent) => {
     e.preventDefault(); setAddError(""); setAddSuccess(""); setIsLoading(true);
     try {
-      const res = await fetch("/api/participants", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type: "santa", value: newSantaName.trim() }) });
+      const res = await fetch("/api/participants", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "santa", value: newSantaName.trim(), email: newSantaEmail.trim() })
+      });
       const data = await res.json();
-      if (res.ok) { setAddSuccess("Santa added!"); setNewSantaName(""); fetchData(); }
+      if (res.ok) { setAddSuccess("Santa added!"); setNewSantaName(""); setNewSantaEmail(""); fetchData(); }
       else { setAddError(data.error || "Failed"); }
     } catch { setAddError("Failed"); }
     finally { setIsLoading(false); }
@@ -107,8 +112,9 @@ export default function AdminPage() {
           </div>
           <div className="bg-black/30 rounded-2xl p-6 border border-white/10">
             <h2 className="text-2xl font-bold mb-4 text-yellow-400">Add Santa Name</h2>
-            <form onSubmit={handleAddSanta} className="space-y-4">
-              <input type="text" value={newSantaName} onChange={(e) => setNewSantaName(e.target.value)} className="w-full px-4 py-3 rounded-lg bg-white/10 border border-white/20 text-white" placeholder="John Doe" required />
+            <form onSubmit={handleAddSanta} className="space-y-3">
+              <input type="text" value={newSantaName} onChange={(e) => setNewSantaName(e.target.value)} className="w-full px-4 py-3 rounded-lg bg-white/10 border border-white/20 text-white" placeholder="Name (e.g. John Doe)" required />
+              <input type="email" value={newSantaEmail} onChange={(e) => setNewSantaEmail(e.target.value)} className="w-full px-4 py-3 rounded-lg bg-white/10 border border-white/20 text-white" placeholder="Their email (to avoid self-match)" required />
               <button type="submit" disabled={isLoading} className="w-full bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-3 rounded-full">Add Santa</button>
             </form>
           </div>
@@ -138,7 +144,15 @@ export default function AdminPage() {
               <button onClick={handleClearSantas} className="px-3 py-1 bg-red-600/50 hover:bg-red-600 rounded text-white text-sm">Clear</button>
             </div>
             <div className="max-h-60 overflow-y-auto space-y-2">
-              {santaNames.length === 0 ? <p className="text-gray-500">No names added</p> : santaNames.map((s) => <div key={s.id} className={"bg-white/5 rounded p-2 text-sm flex justify-between " + (s.assigned ? "text-gray-500 line-through" : "text-white")}><span>{s.name}</span>{s.assigned && <span className="text-xs text-green-400">Assigned</span>}</div>)}
+              {santaNames.length === 0 ? <p className="text-gray-500">No names added</p> : santaNames.map((s) => (
+                <div key={s.id} className={"bg-white/5 rounded p-2 text-sm " + (s.assigned ? "opacity-50" : "")}>
+                  <div className="flex justify-between">
+                    <span className={s.assigned ? "text-gray-500 line-through" : "text-white"}>{s.name}</span>
+                    {s.assigned && <span className="text-xs text-green-400">Assigned</span>}
+                  </div>
+                  <p className="text-gray-500 text-xs">{s.email}</p>
+                </div>
+              ))}
             </div>
           </div>
         </div>

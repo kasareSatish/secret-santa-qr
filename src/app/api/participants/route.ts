@@ -9,7 +9,7 @@ export async function GET() {
     const santaNames = await db.collection("santa_names").find({}).toArray();
     return NextResponse.json({
       emails: emails.map(e => ({ id: e._id.toString(), email: e.email })),
-      santaNames: santaNames.map(s => ({ id: s._id.toString(), name: s.name, assigned: s.assigned || false }))
+      santaNames: santaNames.map(s => ({ id: s._id.toString(), name: s.name, email: s.email, assigned: s.assigned || false }))
     });
   } catch (error) {
     return NextResponse.json({ error: "Failed to fetch" }, { status: 500 });
@@ -18,7 +18,7 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    const { type, value } = await request.json();
+    const { type, value, email } = await request.json();
     if (!type || !value) {
       return NextResponse.json({ error: "Type and value required" }, { status: 400 });
     }
@@ -34,11 +34,17 @@ export async function POST(request: NextRequest) {
       await db.collection("emails").insertOne({ email: normalizedEmail, createdAt: new Date() });
       return NextResponse.json({ success: true, message: "Email added" });
     } else if (type === "santa") {
+      const santaEmail = email?.trim().toLowerCase() || "";
       const existing = await db.collection("santa_names").findOne({ name: value.trim() });
       if (existing) {
         return NextResponse.json({ error: "Santa name already exists" }, { status: 400 });
       }
-      await db.collection("santa_names").insertOne({ name: value.trim(), assigned: false, createdAt: new Date() });
+      await db.collection("santa_names").insertOne({ 
+        name: value.trim(), 
+        email: santaEmail,
+        assigned: false, 
+        createdAt: new Date() 
+      });
       return NextResponse.json({ success: true, message: "Santa name added" });
     } else {
       return NextResponse.json({ error: "Invalid type" }, { status: 400 });
