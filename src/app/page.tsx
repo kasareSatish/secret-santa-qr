@@ -11,8 +11,8 @@ export default function Home() {
   const [qrGenerated, setQrGenerated] = useState(false);
   const [progress, setProgress] = useState<ProgressData | null>(null);
   const [snowflakes, setSnowflakes] = useState<{ id: number; left: number; delay: number; duration: number }[]>([]);
-  const lastMatchCountRef = useRef(0);
   const [celebrating, setCelebrating] = useState(false);
+  const lastMatchCountRef = useRef<number | null>(null);
   const pollInterval = useRef<NodeJS.Timeout | null>(null);
 
   const fireCrackers = () => {
@@ -78,7 +78,9 @@ export default function Home() {
       const res = await fetch("/api/scan");
       const data = await res.json();
 
-      if (data.completedScans > lastMatchCountRef.current && lastMatchCountRef.current > 0) {
+      // Only celebrate if this is not the first fetch AND count increased
+      if (lastMatchCountRef.current !== null && data.completedScans > lastMatchCountRef.current) {
+        console.log("Match found! Celebrating...");
         setCelebrating(true);
         fireCrackers();
         setTimeout(() => setCelebrating(false), 6000);
@@ -109,7 +111,7 @@ export default function Home() {
     <div className="min-h-screen relative overflow-hidden">
       {snowflakes.map((f) => <span key={f.id} className="snowflake" style={{ left: f.left + "%", animationDelay: f.delay + "s", animationDuration: f.duration + "s" }}>&#10052;</span>)}
 
-      {/* Celebration Overlay - shows on top but doesn't hide content */}
+      {/* Celebration Overlay */}
       {celebrating && (
         <div className="fixed inset-0 flex items-center justify-center z-50 pointer-events-none">
           <div className="bg-black/80 backdrop-blur-sm rounded-3xl p-10 text-center border-4 border-yellow-400 shadow-2xl animate-bounce">
