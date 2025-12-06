@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import QRCode from "qrcode";
 import confetti from "canvas-confetti";
 
@@ -13,14 +13,14 @@ export default function Home() {
   const [snowflakes, setSnowflakes] = useState<{ id: number; left: number; delay: number; duration: number }[]>([]);
   const [celebrating, setCelebrating] = useState(false);
   const lastMatchCountRef = useRef<number | null>(null);
+  const isFirstFetch = useRef(true);
   const pollInterval = useRef<NodeJS.Timeout | null>(null);
 
-  const fireCrackers = () => {
+  const fireCrackers = useCallback(() => {
     const duration = 4000;
     const end = Date.now() + duration;
     const colors = ["#ff0000", "#00ff00", "#ffd700", "#ff6b6b", "#4ecdc4", "#ffffff"];
 
-    // Big initial burst
     confetti({
       particleCount: 200,
       spread: 120,
@@ -28,7 +28,6 @@ export default function Home() {
       colors: colors
     });
 
-    // Continuous side bursts
     (function frame() {
       confetti({
         particleCount: 5,
@@ -50,7 +49,6 @@ export default function Home() {
       }
     })();
 
-    // Another burst
     setTimeout(() => {
       confetti({
         particleCount: 100,
@@ -59,7 +57,31 @@ export default function Home() {
         colors: colors
       });
     }, 1500);
-  };
+  }, []);
+
+  const triggerCelebration = useCallback(() => {
+    setCelebrating(true);
+    fireCrackers();
+    setTimeout(() => setCelebrating(false), 6000);
+  }, [fireCrackers]);
+
+  const fetchData = useCallback(async () => {
+    try {
+      const res = await fetch("/api/scan");
+      const data = await res.json();
+      const currentCount = data.completedScans;
+
+      if (isFirstFetch.current) {
+        isFirstFetch.current = false;
+        lastMatchCountRef.current = currentCount;
+      } else if (currentCount > (lastMatchCountRef.current || 0)) {
+        triggerCelebration();
+        lastMatchCountRef.current = currentCount;
+      }
+
+      setProgress(data);
+    } catch (err) { console.error("Failed:", err); }
+  }, [triggerCelebration]);
 
   useEffect(() => {
     const flakes = Array.from({ length: 30 }, (_, i) => ({ id: i, left: Math.random() * 100, delay: Math.random() * 5, duration: 5 + Math.random() * 10 }));
@@ -71,24 +93,7 @@ export default function Home() {
     return () => {
       if (pollInterval.current) clearInterval(pollInterval.current);
     };
-  }, []);
-
-  const fetchData = async () => {
-    try {
-      const res = await fetch("/api/scan");
-      const data = await res.json();
-
-      // Only celebrate if this is not the first fetch AND count increased
-      if (lastMatchCountRef.current !== null && data.completedScans > lastMatchCountRef.current) {
-        console.log("Match found! Celebrating...");
-        setCelebrating(true);
-        fireCrackers();
-        setTimeout(() => setCelebrating(false), 6000);
-      }
-      lastMatchCountRef.current = data.completedScans;
-      setProgress(data);
-    } catch (err) { console.error("Failed:", err); }
-  };
+  }, [fetchData]);
 
   const generateQR = async () => {
     const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
@@ -111,7 +116,6 @@ export default function Home() {
     <div className="min-h-screen relative overflow-hidden">
       {snowflakes.map((f) => <span key={f.id} className="snowflake" style={{ left: f.left + "%", animationDelay: f.delay + "s", animationDuration: f.duration + "s" }}>&#10052;</span>)}
 
-      {/* Celebration Overlay */}
       {celebrating && (
         <div className="fixed inset-0 flex items-center justify-center z-50 pointer-events-none">
           <div className="bg-black/80 backdrop-blur-sm rounded-3xl p-10 text-center border-4 border-yellow-400 shadow-2xl animate-bounce">
