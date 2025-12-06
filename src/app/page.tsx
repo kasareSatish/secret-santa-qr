@@ -13,87 +13,61 @@ export default function Home() {
   const [snowflakes, setSnowflakes] = useState<{ id: number; left: number; delay: number; duration: number }[]>([]);
   const [celebrating, setCelebrating] = useState(false);
   const lastMatchCountRef = useRef<number | null>(null);
-  const isFirstFetch = useRef(true);
   const pollInterval = useRef<NodeJS.Timeout | null>(null);
 
-  const fireCrackers = useCallback(() => {
+  const fireCrackers = () => {
     const duration = 4000;
     const end = Date.now() + duration;
     const colors = ["#ff0000", "#00ff00", "#ffd700", "#ff6b6b", "#4ecdc4", "#ffffff"];
 
-    confetti({
-      particleCount: 200,
-      spread: 120,
-      origin: { y: 0.5 },
-      colors: colors
-    });
+    confetti({ particleCount: 200, spread: 120, origin: { y: 0.5 }, colors });
 
     (function frame() {
-      confetti({
-        particleCount: 5,
-        angle: 60,
-        spread: 55,
-        origin: { x: 0, y: 0.7 },
-        colors: colors
-      });
-      confetti({
-        particleCount: 5,
-        angle: 120,
-        spread: 55,
-        origin: { x: 1, y: 0.7 },
-        colors: colors
-      });
-
-      if (Date.now() < end) {
-        requestAnimationFrame(frame);
-      }
+      confetti({ particleCount: 5, angle: 60, spread: 55, origin: { x: 0, y: 0.7 }, colors });
+      confetti({ particleCount: 5, angle: 120, spread: 55, origin: { x: 1, y: 0.7 }, colors });
+      if (Date.now() < end) requestAnimationFrame(frame);
     })();
 
-    setTimeout(() => {
-      confetti({
-        particleCount: 100,
-        spread: 100,
-        origin: { y: 0.6 },
-        colors: colors
-      });
-    }, 1500);
-  }, []);
+    setTimeout(() => confetti({ particleCount: 100, spread: 100, origin: { y: 0.6 }, colors }), 1500);
+  };
 
-  const triggerCelebration = useCallback(() => {
+  const triggerCelebration = () => {
     setCelebrating(true);
     fireCrackers();
     setTimeout(() => setCelebrating(false), 6000);
-  }, [fireCrackers]);
-
-  const fetchData = useCallback(async () => {
-    try {
-      const res = await fetch("/api/scan");
-      const data = await res.json();
-      const currentCount = data.completedScans;
-
-      if (isFirstFetch.current) {
-        isFirstFetch.current = false;
-        lastMatchCountRef.current = currentCount;
-      } else if (currentCount > (lastMatchCountRef.current || 0)) {
-        triggerCelebration();
-        lastMatchCountRef.current = currentCount;
-      }
-
-      setProgress(data);
-    } catch (err) { console.error("Failed:", err); }
-  }, [triggerCelebration]);
+  };
 
   useEffect(() => {
     const flakes = Array.from({ length: 30 }, (_, i) => ({ id: i, left: Math.random() * 100, delay: Math.random() * 5, duration: 5 + Math.random() * 10 }));
     setSnowflakes(flakes);
-    fetchData();
 
+    const fetchData = async () => {
+      try {
+        const res = await fetch("/api/scan");
+        const data = await res.json();
+        const currentCount = data.completedScans;
+
+        // First fetch - just set baseline
+        if (lastMatchCountRef.current === null) {
+          lastMatchCountRef.current = currentCount;
+        } 
+        // Subsequent fetches - check for new matches
+        else if (currentCount > lastMatchCountRef.current) {
+          triggerCelebration();
+          lastMatchCountRef.current = currentCount;
+        }
+
+        setProgress(data);
+      } catch (err) { console.error("Failed:", err); }
+    };
+
+    fetchData();
     pollInterval.current = setInterval(fetchData, 3000);
 
     return () => {
       if (pollInterval.current) clearInterval(pollInterval.current);
     };
-  }, [fetchData]);
+  }, []);
 
   const generateQR = async () => {
     const baseUrl = typeof window !== "undefined" ? window.location.origin : "";
@@ -162,6 +136,9 @@ export default function Home() {
               </div>
             )}
             {!qrCodeUrl && totalCount > 0 && !allCompleted && <div className="qr-container text-center opacity-50"><div className="w-[300px] h-[300px] flex items-center justify-center border-2 border-dashed border-gray-300 rounded-lg"><p className="text-gray-500 px-4">Click to generate a QR code</p></div></div>}
+            
+            {/* Test button - click to test celebration */}
+            <button onClick={triggerCelebration} className="mt-4 text-xs text-gray-600 hover:text-gray-400 underline">Test Celebration</button>
           </div>
         </div>
         <div className="text-center mt-8">
