@@ -12,29 +12,36 @@ export default function Home() {
   const [progress, setProgress] = useState<ProgressData | null>(null);
   const [snowflakes, setSnowflakes] = useState<{ id: number; left: number; delay: number; duration: number }[]>([]);
   const [lastMatchCount, setLastMatchCount] = useState(0);
-  const [showMatchAlert, setShowMatchAlert] = useState(false);
+  const [celebrating, setCelebrating] = useState(false);
   const pollInterval = useRef<NodeJS.Timeout | null>(null);
 
   const fireCrackers = () => {
-    // Fire multiple confetti bursts
-    const duration = 3000;
+    const duration = 4000;
     const end = Date.now() + duration;
+    const colors = ["#ff0000", "#00ff00", "#ffd700", "#ff6b6b", "#4ecdc4", "#ffffff"];
 
-    const colors = ["#ff0000", "#00ff00", "#ffd700", "#ff6b6b", "#4ecdc4"];
+    // Big initial burst
+    confetti({
+      particleCount: 200,
+      spread: 120,
+      origin: { y: 0.5 },
+      colors: colors
+    });
 
+    // Continuous side bursts
     (function frame() {
       confetti({
         particleCount: 5,
         angle: 60,
         spread: 55,
-        origin: { x: 0, y: 0.8 },
+        origin: { x: 0, y: 0.7 },
         colors: colors
       });
       confetti({
         particleCount: 5,
         angle: 120,
         spread: 55,
-        origin: { x: 1, y: 0.8 },
+        origin: { x: 1, y: 0.7 },
         colors: colors
       });
 
@@ -43,13 +50,15 @@ export default function Home() {
       }
     })();
 
-    // Big center burst
-    confetti({
-      particleCount: 150,
-      spread: 100,
-      origin: { y: 0.6 },
-      colors: colors
-    });
+    // Another burst in the middle
+    setTimeout(() => {
+      confetti({
+        particleCount: 100,
+        spread: 100,
+        origin: { y: 0.6 },
+        colors: colors
+      });
+    }, 1000);
   };
 
   useEffect(() => {
@@ -70,9 +79,9 @@ export default function Home() {
       const data = await res.json();
 
       if (data.completedScans > lastMatchCount && lastMatchCount > 0) {
-        setShowMatchAlert(true);
+        setCelebrating(true);
         fireCrackers();
-        setTimeout(() => setShowMatchAlert(false), 5000);
+        setTimeout(() => setCelebrating(false), 6000);
       }
       setLastMatchCount(data.completedScans);
       setProgress(data);
@@ -100,17 +109,6 @@ export default function Home() {
     <div className="min-h-screen relative overflow-hidden">
       {snowflakes.map((f) => <span key={f.id} className="snowflake" style={{ left: f.left + "%", animationDelay: f.delay + "s", animationDuration: f.duration + "s" }}>&#10052;</span>)}
 
-      {/* Congratulations Alert */}
-      {showMatchAlert && (
-        <div className="fixed inset-0 flex items-center justify-center z-50 pointer-events-none">
-          <div className="bg-gradient-to-r from-green-600 to-red-600 text-white px-10 py-6 rounded-2xl shadow-2xl text-center animate-bounce">
-            <p className="text-4xl mb-2">&#127881;&#127881;&#127881;</p>
-            <p className="text-2xl font-bold">Congratulations!</p>
-            <p className="text-lg">Someone just got their Secret Santa!</p>
-          </div>
-        </div>
-      )}
-
       <div className="relative z-10 container mx-auto px-4 py-8">
         <div className="text-center mb-8">
           <h1 className="text-5xl font-bold title-glow mb-4"><span className="text-red-500">&#127876;</span> Secret Santa <span className="text-red-500">&#127876;</span></h1>
@@ -124,26 +122,40 @@ export default function Home() {
                 <span>{completedCount} / {totalCount} matched</span>
               </div>
               <div className="w-full bg-white/10 rounded-full h-3"><div className="bg-gradient-to-r from-green-500 to-red-500 h-3 rounded-full transition-all" style={{ width: totalCount > 0 ? (completedCount / totalCount * 100) + "%" : "0%" }} /></div>
-              {availableSantas > 0 && <p className="text-gray-500 text-sm mt-2">{availableSantas} santa matches available</p>}
+              {availableSantas > 0 && !celebrating && <p className="text-gray-500 text-sm mt-2">{availableSantas} santa matches available</p>}
             </div>
-            {totalCount === 0 ? (
-              <p className="text-gray-400 mb-6">No data yet. Add emails and santa names in Admin.</p>
-            ) : allCompleted ? (
-              <div className="text-center mb-6">
-                <p className="text-yellow-400 text-2xl mb-2">&#127881; All Secret Santas assigned!</p>
-                <p className="text-green-400">Event complete - {completedCount} matches made</p>
+
+            {/* Celebration Screen */}
+            {celebrating ? (
+              <div className="text-center py-8">
+                <p className="text-6xl mb-4">&#127881;&#127882;&#127881;</p>
+                <h2 className="text-4xl font-bold text-yellow-400 mb-4 animate-pulse">Congratulations!</h2>
+                <p className="text-2xl text-green-400 mb-2">Match Found!</p>
+                <p className="text-gray-300">Someone just got their Secret Santa!</p>
+                <p className="text-6xl mt-4">&#127877;&#127873;&#127876;</p>
               </div>
             ) : (
-              <button onClick={generateQR} className="christmas-btn text-white text-xl font-bold py-4 px-10 rounded-full mb-6">&#127922; Generate QR Code</button>
+              <>
+                {totalCount === 0 ? (
+                  <p className="text-gray-400 mb-6">No data yet. Add emails and santa names in Admin.</p>
+                ) : allCompleted ? (
+                  <div className="text-center mb-6">
+                    <p className="text-yellow-400 text-2xl mb-2">&#127881; All Secret Santas assigned!</p>
+                    <p className="text-green-400">Event complete - {completedCount} matches made</p>
+                  </div>
+                ) : (
+                  <button onClick={generateQR} className="christmas-btn text-white text-xl font-bold py-4 px-10 rounded-full mb-6">&#127922; Generate QR Code</button>
+                )}
+                {qrCodeUrl && qrGenerated && !allCompleted && (
+                  <div className="qr-container text-center">
+                    <p className="text-gray-800 font-semibold mb-3 text-lg">&#127873; Scan to get your match!</p>
+                    <img src={qrCodeUrl} alt="QR Code" className="mx-auto" />
+                    <p className="text-gray-600 text-sm mt-3">Enter your email to reveal your Secret Santa</p>
+                  </div>
+                )}
+                {!qrCodeUrl && totalCount > 0 && !allCompleted && <div className="qr-container text-center opacity-50"><div className="w-[300px] h-[300px] flex items-center justify-center border-2 border-dashed border-gray-300 rounded-lg"><p className="text-gray-500 px-4">Click to generate a QR code</p></div></div>}
+              </>
             )}
-            {qrCodeUrl && qrGenerated && !allCompleted && (
-              <div className="qr-container text-center">
-                <p className="text-gray-800 font-semibold mb-3 text-lg">&#127873; Scan to get your match!</p>
-                <img src={qrCodeUrl} alt="QR Code" className="mx-auto" />
-                <p className="text-gray-600 text-sm mt-3">Enter your email to reveal your Secret Santa</p>
-              </div>
-            )}
-            {!qrCodeUrl && totalCount > 0 && !allCompleted && <div className="qr-container text-center opacity-50"><div className="w-[300px] h-[300px] flex items-center justify-center border-2 border-dashed border-gray-300 rounded-lg"><p className="text-gray-500 px-4">Click to generate a QR code</p></div></div>}
           </div>
         </div>
         <div className="text-center mt-8">
